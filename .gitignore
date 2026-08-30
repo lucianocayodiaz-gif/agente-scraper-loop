@@ -1,0 +1,19 @@
+# Entorno virtual de Python
+.venv/
+venv/
+
+# Variables de entorno
+.env
+
+# Archivos compilados de Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Carpeta de resultados
+outputs/*.csv
+outputs/*.json
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
