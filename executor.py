@@ -1,11 +1,14 @@
 ﻿"""
 executor.py - Sandbox de ejecución para el código generado por el LLM.
-Ejecuta el código de forma segura y captura stdout, stderr y resultados.
+Escribe el código como script temporal (como pide la spec) y lo ejecuta
+en un subprocess aislado, capturando stdout, stderr y resultados.
 """
 
 import subprocess
 import sys
 import json
+import os
+import tempfile
 
 
 class CodeExecutor:
@@ -15,11 +18,20 @@ class CodeExecutor:
 
     def execute_code(self, code: str) -> dict:
         """
-        Fase 3 del Loop: ejecuta el código generado en un proceso aislado.
+        Fase 3 del Loop: escribe el código generado como script temporal
+        y lo ejecuta en un proceso aislado.
         """
+        tmp_path = None
         try:
+            # Script temporal: evita el límite de cmdline de Windows
+            with tempfile.NamedTemporaryFile(
+                "w", suffix=".py", delete=False, encoding="utf-8"
+            ) as f:
+                f.write(code)
+                tmp_path = f.name
+
             result = subprocess.run(
-                [sys.executable, "-c", code],
+                [sys.executable, tmp_path],
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
@@ -54,6 +66,10 @@ class CodeExecutor:
                 "data": None,
                 "error": str(e),
             }
+        finally:
+            # Limpieza del script temporal
+            if tmp_path and os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
     @staticmethod
     def _parse_json(stdout: str):
