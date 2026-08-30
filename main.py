@@ -1,12 +1,14 @@
 ﻿"""
 main.py - Orquestador del agente scraper autónomo.
-Controla el loop de 4 fases: Planificacion -> Generacion -> Ejecucion -> Validacion.
+Controla el loop de 4 fases e incluye deteccion de infinite scroll
+(Escenario 2 de la spec).
 """
 
 import base64
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 
 from bs4 import BeautifulSoup, Comment
 
@@ -29,6 +31,13 @@ def fetch_html(url: str) -> str:
         return f.read()
 
 
+def page_url(url: str) -> str:
+    """Convierte rutas locales a URL file:// para Playwright."""
+    if url.startswith("http"):
+        return url
+    return Path(url).resolve().as_uri()
+
+
 def simplify_html(html: str, max_chars: int = 6000) -> str:
     """Fase 1b: mapa simplificado del DOM (sin ruido, control de tokens)."""
     soup = BeautifulSoup(html, "html.parser")
@@ -43,8 +52,11 @@ def build_prompt(schema: dict, dom_map: str) -> str:
     """Construye el prompt de la Fase 2 para el LLM."""
     return (
         "Eres un experto en web scraping.\n"
-        "La variable `html` ya contiene el HTML de la pagina.\n"
-        "Usa BeautifulSoup para extraer una lista de objetos con este esquema JSON:\n"
+        "La variable `html` contiene el HTML inicial y `url` la URL de la pagina.\n"
+        "Prefiere BeautifulSoup sobre `html` si los datos estan completos.\n"
+        "Si el HTML inicial no contiene todos los datos (carga dinamica o infinite scroll), "
+        "usa Playwright con `url` y haz scrolls progresivos hasta cargar todo.\n"
+        "Extrae una lista de objetos con este esquema JSON:\n"
         f"{json.dumps(schema)}\n\n"
         "DOM simplificado de la pagina:\n"
         f"{dom_map}\n\n"
@@ -62,7 +74,7 @@ def save_results(data, url: str) -> str:
     return path
 
 
-def run_scraper(url: str, schema: dict, seed_code: str = None):
+def run_scraper(url: str, schema: dict, seed_code: str = None, min_items: int = 1, timeout: int = 30):
     """Ejecuta el agente autónomo (Loop de 4 fases)."""
     print(f"🚀 Iniciando agente para: {url}")
 
@@ -72,20 +84,24 @@ def run_scraper(url: str, schema: dict, seed_code: str = None):
     print("📊 Fase 1 completa: DOM analizado")
 
     llm = LLMClient()
-    executor = CodeExecutor(timeout=30)
+    executor = CodeExecutor(timeout=timeout)
     validator = DataValidator(schema)
 
     prompt = build_prompt(schema, dom_map)
 
-    # Fase 2: Generacion (o codigo sembrado para demo de auto-correccion)
+    # Fase 2: Generacion (o codigo sembrado para demos)
     code = seed_code if seed_code else llm.generate_code(prompt)
     print("🤖 Fase 2 completa: codigo generado")
 
-    # Inyeccion del HTML via base64 (evita problemas de escapado)
+    # Inyeccion de html (base64) y url para el codigo generado
     b64 = base64.b64encode(html.encode("utf-8")).decode("ascii")
-    preamble = f'import base64\nhtml = base64.b64decode("{b64}").decode("utf-8")\n'
+    preamble = (
+        "import base64\n"
+        f'html = base64.b64decode("{b64}").decode("utf-8")\n'
+        f'url = "{page_url(url)}"\n'
+    )
 
-    # Loop de Fases 3-4: Ejecucion, Validacion y Auto-correccion
+    # Loop de Fases 3-4
     for iteration in range(1, MAX_ITERATIONS + 1):
         print(f"\n🔄 Iteracion {iteration}/{MAX_ITERATIONS}")
 
@@ -93,6 +109,14 @@ def run_scraper(url: str, schema: dict, seed_code: str = None):
 
         if result["success"]:
             is_valid, error_msg = validator.validate(result["data"])
+            # Escenario 2: volumen por debajo del umbral (infinite scroll)
+            if is_valid and len(result["data"]) < min_items:
+                is_valid = False
+                error_msg = (
+                    f"Solo se extrajeron {len(result['data'])} items y se esperan al menos {min_items}. "
+                    "Posible estructura dinamica (infinite scroll). "
+                    "Genera codigo con Playwright que abra `url` y haga scrolls progresivos."
+                )
         else:
             is_valid, error_msg = False, result["error"]
 

@@ -16,16 +16,6 @@ class CodeExecutor:
     def execute_code(self, code: str) -> dict:
         """
         Fase 3 del Loop: ejecuta el código generado en un proceso aislado.
-
-        Args:
-            code: Código Python a ejecutar
-
-        Returns:
-            Diccionario con:
-            - success: bool (si la ejecución fue exitosa)
-            - output: str (stdout crudo)
-            - data: list/dict (JSON parseado, o None)
-            - error: str (stderr o mensaje de timeout)
         """
         try:
             result = subprocess.run(
@@ -67,8 +57,21 @@ class CodeExecutor:
 
     @staticmethod
     def _parse_json(stdout: str):
-        """Intenta parsear el stdout como JSON; devuelve None si no se puede."""
-        try:
-            return json.loads(stdout.strip())
-        except (json.JSONDecodeError, ValueError):
+        """Extrae JSON del stdout, tolerando lineas de ruido (logs de scroll)."""
+        text = stdout.strip()
+        if not text:
             return None
+        try:
+            return json.loads(text)
+        except (json.JSONDecodeError, ValueError):
+            pass
+        # Modo tolerante: busca el primer [ o { y usa raw_decode
+        for start in ("[", "{"):
+            idx = text.find(start)
+            if idx != -1:
+                try:
+                    obj, _ = json.JSONDecoder().raw_decode(text[idx:])
+                    return obj
+                except (json.JSONDecodeError, ValueError):
+                    continue
+        return None

@@ -1,0 +1,25 @@
+﻿<html>
+<body>
+<h1>Catalogo con Infinite Scroll</h1>
+<div id="list">
+  <div class="item" style="min-height:300px"><h3 class="title">Producto 1</h3><span class="price">1.00</span></div>
+  <div class="item" style="min-height:300px"><h3 class="title">Producto 2</h3><span class="price">2.00</span></div>
+  <div class="item" style="min-height:300px"><h3 class="title">Producto 3</h3><span class="price">3.00</span></div>
+</div>
+<script>
+let count = 3;
+window.addEventListener('scroll', () => {
+  if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 50) {
+    for (let i = 0; i < 3 && count < 9; i++) {
+      count++;
+      const div = document.createElement('div');
+      div.className = 'item';
+      div.style.minHeight = '300px';
+      div.innerHTML = '<h3 class="title">Producto ' + count + '</h3><span class="price">' + count + '.00</span>';
+      document.getElementById('list').appendChild(div);
+    }
+  }
+});
+</script>
+</body>
+</html>

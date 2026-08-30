@@ -21,7 +21,7 @@ class LLMClient:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
+            temperature=0.0,
         )
         return response.choices[0].message.content
 
@@ -46,7 +46,7 @@ class LLMClient:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.2,
+            temperature=0.0,
         )
         return self._extract_code(response.choices[0].message.content)
 
