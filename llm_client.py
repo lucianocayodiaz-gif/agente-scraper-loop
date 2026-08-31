@@ -38,7 +38,7 @@ class LLMClient:
         system_prompt = (
             "Eres un experto en web scraping con Python. "
             "Genera UNICAMENTE codigo Python, sin explicaciones. "
-            "El codigo debe imprimir el resultado como JSON en stdout."
+            "El codigo debe imprimir el resultado como JSON en stdout. Librerias disponibles en el sandbox: bs4, json, re, urllib, playwright.sync_api, requests."
         )
         response = self.client.chat.completions.create(
             model=self.model,

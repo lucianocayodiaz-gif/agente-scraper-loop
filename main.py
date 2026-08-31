@@ -74,7 +74,7 @@ def save_results(data, url: str) -> str:
     return path
 
 
-def run_scraper(url: str, schema: dict, seed_code: str = None, min_items: int = 1, timeout: int = 30):
+def run_scraper(url: str, schema: dict, seed_code: str = None, min_items: int = 1, timeout: int = 60):
     """Ejecuta el agente autónomo (Loop de 4 fases)."""
     print(f"🚀 Iniciando agente para: {url}")
 
