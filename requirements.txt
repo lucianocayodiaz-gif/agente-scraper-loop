@@ -3,3 +3,4 @@ beautifulsoup4==4.12.3
 pydantic==2.8.2
 openai>=1.56.0
 python-dotenv==1.0.1
+pytest>=8.0.0
