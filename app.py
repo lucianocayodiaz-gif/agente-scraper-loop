@@ -8,6 +8,13 @@ import json
 
 import streamlit as st
 
+# Gate de acceso para el deploy publico (evita que desconocidos gasten tu cuota)
+import os
+_APP_PW = os.getenv("APP_PASSWORD", "")
+if _APP_PW:
+    if st.sidebar.text_input("Contrasena de acceso", type="password") != _APP_PW:
+        st.stop()
+
 from main import run_scraper, cargar_memoria, METRICS_PATH, _leer_json
 
 st.set_page_config(page_title="Agente Scraper Autonomo", page_icon="🤖", layout="wide")
