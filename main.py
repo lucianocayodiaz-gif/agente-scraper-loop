@@ -88,7 +88,7 @@ def build_prompt(schema: dict, dom_map: str) -> str:
         "La variable `html` contiene el HTML inicial y `url` la URL de la pagina.\n"
         "Prefiere BeautifulSoup sobre `html` si los datos estan completos.\n"
         "Si el HTML inicial no contiene todos los datos (carga dinamica o infinite scroll), "
-        "usa Playwright con `url` y haz scrolls progresivos hasta cargar todo.\n"
+        "usa Playwright con `url` y haz scrolls progresivos hasta cargar todo. Si el DOM muestra paginacion (next, siguiente, numeros de pagina) o pestanas necesarias, navegalas con Playwright y acumula los items de todas las paginas.\n"
         "Extrae una lista de objetos con este esquema JSON:\n"
         f"{json.dumps(schema)}\n\n"
         "DOM simplificado de la pagina:\n"
