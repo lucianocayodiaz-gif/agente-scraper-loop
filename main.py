@@ -1,6 +1,6 @@
 ﻿"""
 main.py - Orquestador del agente scraper autónomo.
-Loop de 4 fases + memoria de selectores + metricas de corrida.
+Loop de 4 fases + memoria + metricas + etica (robots.txt) + alertas.
 """
 
 import base64
@@ -10,6 +10,8 @@ import time
 import urllib.request
 from datetime import datetime
 from pathlib import Path
+from urllib import robotparser
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup, Comment
 
@@ -22,8 +24,28 @@ from validator import DataValidator
 OUTPUT_DIR = "outputs"
 METRICS_PATH = os.path.join(OUTPUT_DIR, "metrics.json")
 MEMORY_PATH = os.path.join(OUTPUT_DIR, "memory.json")
+ALERTAS_PATH = os.path.join(OUTPUT_DIR, "alertas.log")
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; AgenteScraperLoop/1.0)"}
+
+
+def respetar_robots(url: str) -> bool:
+    """Etica: consulta el robots.txt del sitio antes de scrapear."""
+    try:
+        partes = urlparse(url)
+        rp = robotparser.RobotFileParser()
+        rp.set_url(f"{partes.scheme}://{partes.netloc}/robots.txt")
+        rp.read()
+        return rp.can_fetch(HEADERS["User-Agent"], url)
+    except Exception:
+        return True
+
+
+def registrar_alerta(url: str, mensaje: str):
+    """Monitoreo: deja registro de corridas fallidas en alertas.log."""
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    with open(ALERTAS_PATH, "a", encoding="utf-8") as f:
+        f.write(f"{datetime.now().isoformat(timespec='seconds')} | {url} | {mensaje}\n")
 
 
 def fetch_html(url: str, retries: int = 3) -> str:
@@ -96,7 +118,7 @@ def _leer_json(path, default):
     return default
 
 
-def registrar_metrica(url: str, success: bool, iterations: int, items: int, elapsed: float):
+def registrar_metrica(url, success, iterations, items, elapsed):
     """Agrega una corrida al historial de metricas (base del negocio)."""
     historial = _leer_json(METRICS_PATH, [])
     historial.append({
@@ -125,11 +147,17 @@ def guardar_memoria(url: str, code: str):
         json.dump(mem, f, ensure_ascii=False, indent=2)
 
 
-def run_scraper(url: str, schema: dict, seed_code: str = None, min_items: int = 1,
-                timeout: int = 60, progress=print):
-    """Ejecuta el agente autónomo (Loop de 4 fases + memoria + metricas)."""
+def run_scraper(url, schema, seed_code=None, min_items=1, timeout=60, progress=print):
+    """Ejecuta el agente autónomo (Loop + memoria + metricas + etica + alertas)."""
     inicio = time.time()
     progress(f"🚀 Iniciando agente para: {url}")
+
+    # Etica: respetar robots.txt antes de tocar el sitio
+    if url.startswith("http") and not respetar_robots(url):
+        progress("🚫 Etica: el robots.txt del sitio no permite scraping. Abortando.")
+        registrar_metrica(url, False, 0, 0, time.time() - inicio)
+        registrar_alerta(url, "robots.txt no permite scraping")
+        return None
 
     # Fase 1
     html = fetch_html(url)
@@ -141,7 +169,7 @@ def run_scraper(url: str, schema: dict, seed_code: str = None, min_items: int = 
     validator = DataValidator(schema)
     prompt = build_prompt(schema, dom_map)
 
-    # Fase 2 con prioridad: seed (demo) > memoria (aprendizaje) > LLM
+    # Fase 2 con prioridad: seed > memoria > LLM
     memoria = cargar_memoria()
     if seed_code:
         code = seed_code
@@ -184,7 +212,7 @@ def run_scraper(url: str, schema: dict, seed_code: str = None, min_items: int = 
         if is_valid:
             data = result["data"]
             path = save_results(data, url)
-            guardar_memoria(url, code)  # el agente aprende
+            guardar_memoria(url, code)
             progress(f"✅ Datos validos en iteracion {iteration}")
             progress(f"💾 Guardado en: {path}")
             break
@@ -198,6 +226,7 @@ def run_scraper(url: str, schema: dict, seed_code: str = None, min_items: int = 
 
     if data is None:
         progress("\n⛔ No se lograron datos validos dentro del limite.")
+        registrar_alerta(url, "loop agotado sin datos validos")
     return data
 
 
