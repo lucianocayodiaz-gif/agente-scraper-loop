@@ -1,12 +1,13 @@
 ﻿"""
 main.py - Orquestador del agente scraper autónomo.
-Controla el loop de 4 fases e incluye deteccion de infinite scroll
-(Escenario 2 de la spec).
+Loop de 4 fases + memoria de selectores + metricas de corrida.
 """
 
 import base64
 import json
 import os
+import time
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -19,16 +20,26 @@ from validator import DataValidator
 
 
 OUTPUT_DIR = "outputs"
+METRICS_PATH = os.path.join(OUTPUT_DIR, "metrics.json")
+MEMORY_PATH = os.path.join(OUTPUT_DIR, "memory.json")
+
+HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; AgenteScraperLoop/1.0)"}
 
 
-def fetch_html(url: str) -> str:
-    """Fase 1a: obtiene el HTML desde un archivo local o URL."""
-    if url.startswith("http"):
-        import urllib.request
-        with urllib.request.urlopen(url, timeout=20) as resp:
-            return resp.read().decode("utf-8", errors="ignore")
-    with open(url, encoding="utf-8") as f:
-        return f.read()
+def fetch_html(url: str, retries: int = 3) -> str:
+    """Fase 1a: obtiene HTML con User-Agent y reintentos con backoff."""
+    if not url.startswith("http"):
+        with open(url, encoding="utf-8") as f:
+            return f.read()
+    for intento in range(1, retries + 1):
+        try:
+            req = urllib.request.Request(url, headers=HEADERS)
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                return resp.read().decode("utf-8", errors="ignore")
+        except Exception:
+            if intento == retries:
+                raise
+            time.sleep(2 * intento)
 
 
 def page_url(url: str) -> str:
@@ -60,7 +71,8 @@ def build_prompt(schema: dict, dom_map: str) -> str:
         f"{json.dumps(schema)}\n\n"
         "DOM simplificado de la pagina:\n"
         f"{dom_map}\n\n"
-        "Devuelve UNICAMENTE codigo Python que imprima la lista JSON en stdout."
+        "Devuelve UNICAMENTE codigo Python que imprima la lista JSON en stdout. "
+        "Librerias disponibles en el sandbox: bs4, json, re, urllib, playwright.sync_api, requests."
     )
 
 
@@ -74,26 +86,73 @@ def save_results(data, url: str) -> str:
     return path
 
 
-def run_scraper(url: str, schema: dict, seed_code: str = None, min_items: int = 1, timeout: int = 60):
-    """Ejecuta el agente autónomo (Loop de 4 fases)."""
-    print(f"🚀 Iniciando agente para: {url}")
+def _leer_json(path, default):
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            return default
+    return default
 
-    # Fase 1: Planificacion / Analisis del DOM
+
+def registrar_metrica(url: str, success: bool, iterations: int, items: int, elapsed: float):
+    """Agrega una corrida al historial de metricas (base del negocio)."""
+    historial = _leer_json(METRICS_PATH, [])
+    historial.append({
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "url": url,
+        "exito": success,
+        "iteraciones": iterations,
+        "items": items,
+        "segundos": round(elapsed, 1),
+    })
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    with open(METRICS_PATH, "w", encoding="utf-8") as f:
+        json.dump(historial, f, ensure_ascii=False, indent=2)
+
+
+def cargar_memoria() -> dict:
+    """Memoria de selectores: {url: codigo que ya funciono}."""
+    return _leer_json(MEMORY_PATH, {})
+
+
+def guardar_memoria(url: str, code: str):
+    mem = cargar_memoria()
+    mem[url] = code
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    with open(MEMORY_PATH, "w", encoding="utf-8") as f:
+        json.dump(mem, f, ensure_ascii=False, indent=2)
+
+
+def run_scraper(url: str, schema: dict, seed_code: str = None, min_items: int = 1,
+                timeout: int = 60, progress=print):
+    """Ejecuta el agente autónomo (Loop de 4 fases + memoria + metricas)."""
+    inicio = time.time()
+    progress(f"🚀 Iniciando agente para: {url}")
+
+    # Fase 1
     html = fetch_html(url)
     dom_map = simplify_html(html)
-    print("📊 Fase 1 completa: DOM analizado")
+    progress("📊 Fase 1 completa: DOM analizado")
 
     llm = LLMClient()
     executor = CodeExecutor(timeout=timeout)
     validator = DataValidator(schema)
-
     prompt = build_prompt(schema, dom_map)
 
-    # Fase 2: Generacion (o codigo sembrado para demos)
-    code = seed_code if seed_code else llm.generate_code(prompt)
-    print("🤖 Fase 2 completa: codigo generado")
+    # Fase 2 con prioridad: seed (demo) > memoria (aprendizaje) > LLM
+    memoria = cargar_memoria()
+    if seed_code:
+        code = seed_code
+        progress("🧪 Modo demo: codigo sembrado")
+    elif url in memoria:
+        code = memoria[url]
+        progress("🧠 Memoria: reutilizando codigo que ya funciono en este sitio")
+    else:
+        code = llm.generate_code(prompt)
+        progress("🤖 Fase 2 completa: codigo generado")
 
-    # Inyeccion de html (base64) y url para el codigo generado
     b64 = base64.b64encode(html.encode("utf-8")).decode("ascii")
     preamble = (
         "import base64\n"
@@ -101,15 +160,17 @@ def run_scraper(url: str, schema: dict, seed_code: str = None, min_items: int = 
         f'url = "{page_url(url)}"\n'
     )
 
-    # Loop de Fases 3-4
+    # Loop Fases 3-4
+    data = None
+    used = 0
     for iteration in range(1, MAX_ITERATIONS + 1):
-        print(f"\n🔄 Iteracion {iteration}/{MAX_ITERATIONS}")
+        used = iteration
+        progress(f"\n🔄 Iteracion {iteration}/{MAX_ITERATIONS}")
 
         result = executor.execute_code(preamble + code)
 
         if result["success"]:
             is_valid, error_msg = validator.validate(result["data"])
-            # Escenario 2: volumen por debajo del umbral (infinite scroll)
             if is_valid and len(result["data"]) < min_items:
                 is_valid = False
                 error_msg = (
@@ -121,19 +182,23 @@ def run_scraper(url: str, schema: dict, seed_code: str = None, min_items: int = 
             is_valid, error_msg = False, result["error"]
 
         if is_valid:
-            path = save_results(result["data"], url)
-            print(f"✅ Datos validos en iteracion {iteration}")
-            print(f"💾 Guardado en: {path}")
-            return result["data"]
+            data = result["data"]
+            path = save_results(data, url)
+            guardar_memoria(url, code)  # el agente aprende
+            progress(f"✅ Datos validos en iteracion {iteration}")
+            progress(f"💾 Guardado en: {path}")
+            break
 
-        print(f"❌ Fallo detectado: {error_msg[:200]}")
-
+        progress(f"❌ Fallo detectado: {error_msg[:200]}")
         if iteration < MAX_ITERATIONS:
-            print("🔧 Auto-correccion: pidiendo fix al LLM...")
+            progress("🔧 Auto-correccion: pidiendo fix al LLM...")
             code = llm.generate_code_with_history(prompt, code, error_msg)
 
-    print("\n⛔ No se lograron datos validos dentro del limite de iteraciones.")
-    return None
+    registrar_metrica(url, data is not None, used, len(data) if data else 0, time.time() - inicio)
+
+    if data is None:
+        progress("\n⛔ No se lograron datos validos dentro del limite.")
+    return data
 
 
 if __name__ == "__main__":
