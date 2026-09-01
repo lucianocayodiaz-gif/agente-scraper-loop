@@ -38,7 +38,7 @@ Los scrapers tradicionales se rompen silenciosamente cuando un sitio cambia una 
 - **Pydantic v2** — validación estricta con esquemas dinámicos (`create_model`)
 - **Groq API** — inferencia gratuita y ultrarrápida (`openai/gpt-oss-20b`)
 - **OpenAI SDK** — cliente estándar compatible con Groq
-- **Playwright** — sitios dinámicos (roadmap)
+- **Playwright** — sitios dinámicos (implementado: scrolls y paginación autónoma)
 
 ## 🚀 Instalación
 
@@ -121,12 +121,39 @@ agente-scraper-loop/
 - HTML inyectado al código generado vía **base64** (sin escapado, sin acceso a red desde el código generado).
 - `MAX_ITERATIONS` y simplificación del DOM para **control de costos de tokens**.
 
-
-
-- [ ] Rutina Playwright para infinite scroll
-- [ ] Fallbacks ante campos nulos con selectores alternativos
-- [ ] Tests unitarios con pytest
-- [ ] Soporte de URLs reales con manejo anti-bot
-
 ---
 Proyecto de portafolio que demuestra: Python, IA generativa, web scraping, arquitectura de software y buenas prácticas de Git/seguridad.
+
+## 🧠 Capas de producto
+
+- **Memoria de selectores:** si el agente ya corrigió un sitio, reutiliza el código exitoso en la próxima corrida (3.8s → 1.5s, 0 tokens).
+- **Métricas por corrida:** cada extracción queda en `outputs/metrics.json` (URL, éxito, iteraciones, items, segundos).
+- **Navegación autónoma:** paga 50 páginas solo cuando se lo piden (`--min 50`), eligiendo Playwright (local) o HTTP (nube) según el entorno.
+- **Ética:** consulta `robots.txt` antes de scrapear; si el sitio dice "no", se abstiene.
+- **Alertas:** corridas fallidas registradas en `outputs/alertas.log`.
+
+## 🖥️ UI para no técnicos
+
+`iniciar_app.bat` abre la app Streamlit en el navegador: URL + campos + botón. Historial de corridas y descarga de JSON incluidos.
+
+## 🌐 Demo online
+
+🔗 https://agente-scraper-loop-klci3rdd833dklwbomh4os.streamlit.app
+(Contraseña de acceso: pedírsela al autor)
+
+## 🔄 CI
+
+![CI](https://github.com/lucianocayodiaz-gif/agente-scraper-loop/actions/workflows/ci.yml/badge.svg)
+
+Cada push ejecuta la suite offline de pytest con GitHub Actions.
+
+## 📊 Incidentes reales resueltos
+
+| Incidente | Causa | Resolución |
+|---|---|---|
+| Push rechazado por secret scanning | Credencial commiteada por error | Purga de historial + rotación de clave |
+| WinError 206 en el executor | Límite de 32KB en cmdline de Windows | Código en archivos temporales |
+| ModuleNotFoundError: requests | Sandbox sin librería común | Contrato de sandbox en el prompt |
+| Modelo deprecado (llama3-8b) | Default hardcodeado viejo | Default nuevo + modelo en secrets |
+| Wheels de pydantic-core en cloud | Pin estricto sin wheel | Split runtime/dev de dependencias |
+| HF cambió tier gratis a pago | Cambio externo de plataforma | Pivot a Streamlit Community Cloud |
