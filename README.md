@@ -104,14 +104,16 @@ Salida real:
 
 ```
 agente-scraper-loop/
-├── main.py                  # Orquestador del loop (4 fases)
-├── llm_client.py            # Cliente IA (Groq) + limpieza de markdown
-├── executor.py              # Sandbox subprocess con timeout
-├── validator.py             # Validación Pydantic dinámica
-├── config.py                # Configuración central desde .env
-├── demo_autocorreccion.py   # Demo de auto-corrección
-├── test_sites/              # HTMLs v1/v2 que simulan cambios de DOM
-└── outputs/                 # JSONs versionados
+├── main.py            # Orquestador del loop (4 fases + memoria + metricas + etica)
+├── llm_client.py      # Cliente IA (Groq) + limpieza de markdown
+├── executor.py        # Sandbox subprocess con timeout
+├── validator.py       # Validacion Pydantica dinamica
+├── config.py          # Config central (.env / secrets)
+├── scraper.py         # CLI para usuarios
+├── app.py             # UI Streamlit para no tecnicos
+├── tests/             # Suite pytest offline (CI)
+├── test_sites/        # HTMLs v1/v2 que simulan cambios de DOM
+└── outputs/           # JSONs versionados + metricas + memoria
 ```
 
 ## 🔒 Seguridad y decisiones de ingeniería
@@ -122,7 +124,6 @@ agente-scraper-loop/
 - `MAX_ITERATIONS` y simplificación del DOM para **control de costos de tokens**.
 
 ---
-Proyecto de portafolio que demuestra: Python, IA generativa, web scraping, arquitectura de software y buenas prácticas de Git/seguridad.
 
 ## 🧠 Capas de producto
 
@@ -141,6 +142,8 @@ Proyecto de portafolio que demuestra: Python, IA generativa, web scraping, arqui
 🔗 https://agente-scraper-loop-klci3rdd833dklwbomh4os.streamlit.app
 (Contraseña de acceso: pedírsela al autor)
 
+![CI](https://github.com/lucianocayodiaz-gif/agente-scraper-loop/actions/workflows/ci.yml/badge.svg)
+
 ## 🔄 CI
 
 ![CI](https://github.com/lucianocayodiaz-gif/agente-scraper-loop/actions/workflows/ci.yml/badge.svg)
@@ -157,3 +160,5 @@ Cada push ejecuta la suite offline de pytest con GitHub Actions.
 | Modelo deprecado (llama3-8b) | Default hardcodeado viejo | Default nuevo + modelo en secrets |
 | Wheels de pydantic-core en cloud | Pin estricto sin wheel | Split runtime/dev de dependencias |
 | HF cambió tier gratis a pago | Cambio externo de plataforma | Pivot a Streamlit Community Cloud |
+
+Proyecto de portafolio que demuestra: Python, IA generativa, web scraping, arquitectura de software y buenas prácticas de Git/seguridad.
