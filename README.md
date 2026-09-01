@@ -142,14 +142,6 @@ agente-scraper-loop/
 🔗 https://agente-scraper-loop-klci3rdd833dklwbomh4os.streamlit.app
 (Contraseña de acceso: pedírsela al autor)
 
-![CI](https://github.com/lucianocayodiaz-gif/agente-scraper-loop/actions/workflows/ci.yml/badge.svg)
-
-## 🔄 CI
-
-![CI](https://github.com/lucianocayodiaz-gif/agente-scraper-loop/actions/workflows/ci.yml/badge.svg)
-
-Cada push ejecuta la suite offline de pytest con GitHub Actions.
-
 ## 📊 Incidentes reales resueltos
 
 | Incidente | Causa | Resolución |
