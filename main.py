@@ -88,7 +88,7 @@ def build_prompt(schema: dict, dom_map: str) -> str:
         "La variable `html` contiene el HTML inicial y `url` la URL de la pagina.\n"
         "Prefiere BeautifulSoup sobre `html` si los datos estan completos.\n"
         "Si el HTML inicial no contiene todos los datos (carga dinamica o infinite scroll), "
-        "usa Playwright con `url` y haz scrolls progresivos hasta cargar todo. Si el DOM muestra paginacion (next, siguiente, numeros de pagina) o pestanas necesarias, navegalas con Playwright y acumula los items de todas las paginas.\n"
+        "usa Playwright con `url` y haz scrolls progresivos hasta cargar todo. Si el DOM muestra paginacion (next, siguiente, numeros de pagina) o pestanas necesarias, navegalas con Playwright y acumula los items de todas las paginas. Para sitios de retail o con carga dinamica, usa Playwright con headless=True, espera networkidle y usa wait_for_selector sobre las tarjetas de producto antes de extraer.\n"
         "Extrae una lista de objetos con este esquema JSON:\n"
         f"{json.dumps(schema)}\n\n"
         "DOM simplificado de la pagina:\n"
@@ -139,9 +139,9 @@ def cargar_memoria() -> dict:
     return _leer_json(MEMORY_PATH, {})
 
 
-def guardar_memoria(url: str, code: str):
+def guardar_memoria(url: str, code: str, schema=None):
     mem = cargar_memoria()
-    mem[url] = code
+    mem[url] = {"schema": schema, "code": code}
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     with open(MEMORY_PATH, "w", encoding="utf-8") as f:
         json.dump(mem, f, ensure_ascii=False, indent=2)
@@ -174,8 +174,8 @@ def run_scraper(url, schema, seed_code=None, min_items=1, timeout=60, progress=p
     if seed_code:
         code = seed_code
         progress("🧪 Modo demo: codigo sembrado")
-    elif url in memoria:
-        code = memoria[url]
+    elif url in memoria and isinstance(memoria[url], dict) and memoria[url].get("schema") == schema:
+        code = memoria[url]["code"]
         progress("🧠 Memoria: reutilizando codigo que ya funciono en este sitio")
     else:
         code = llm.generate_code(prompt)
@@ -212,7 +212,7 @@ def run_scraper(url, schema, seed_code=None, min_items=1, timeout=60, progress=p
         if is_valid:
             data = result["data"]
             path = save_results(data, url)
-            guardar_memoria(url, code)
+            guardar_memoria(url, code, schema)
             progress(f"✅ Datos validos en iteracion {iteration}")
             progress(f"💾 Guardado en: {path}")
             break
