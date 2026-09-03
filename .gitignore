@@ -17,3 +17,4 @@ outputs/*.json
 # Archivos del sistema
 .DS_Store
 Thumbs.db
+outputs/*.log
